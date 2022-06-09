@@ -996,7 +996,7 @@ class CNMF(object):
         return Yr
 
 
-def load_CNMF(filename, n_processes=1, dview=None):
+def load_CNMF(filename, n_processes=1, dview=None, key=None):
     '''load object saved with the CNMF save method
 
     Args:
@@ -1035,7 +1035,7 @@ def load_CNMF(filename, n_processes=1, dview=None):
         from pynwb import NWBHDF5IO
         with NWBHDF5IO(filename, 'r') as io:
             nwb = io.read()
-            ophys = nwb.processing['ophys']
+            ophys = nwb.processing[f'ophys-{key}' if key is not None else 'ophys']
             rrs_group = ophys.data_interfaces['Fluorescence'].roi_response_series
             rrs = rrs_group['RoiResponseSeries']
             C = rrs.data[:].T
@@ -1082,6 +1082,8 @@ def load_CNMF(filename, n_processes=1, dview=None):
             if 'summary_images' in ophys.data_interfaces:
                 if 'Cn' in ophys.data_interfaces['summary_images']:
                     estims.Cn = ophys.data_interfaces['summary_images']['Cn']
+                if 'mean_projection' in ophys.data_interfaces['summary_images']:
+                    estims.mean = ophys.data_interfaces['summary_images']['mean_projection']
             if hasattr(nwb.acquisition['TwoPhotonSeries'], 'external_file'):
                 setattr(new_obj, 'mmap_file', nwb.acquisition['TwoPhotonSeries'].external_file[0])
             else:
