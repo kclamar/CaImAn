@@ -21,7 +21,7 @@ Right now, CaImAn works and is supported on the following platforms:
 CaImAn presently targets Python 3.8. Parts of CaImAn are written in C++, but apart possibly during install, this is not visible to the user. There is also an [older implementation](https://github.com/flatironinstitute/CaImAn-MATLAB) of CaImAn in Matlab (unsupported). That version can be used with [MCMC spike inference](https://github.com/epnev/continuous_time_ca_sampler) 
 
 ### Other hardware
-* ARM-based versions of Apple hardware work (if on a 16G model), but currently happen under x86 emaulation and we cannot support them as well. A native OSX port is planned for late 2021/early 2022.
+* ARM-based versions of Apple hardware work (if on a 16G model), but currently happen under x86 emulation and we cannot support them as well. A native OSX port is planned for late 2021/early 2022.
 * Support for Linux on ARM (e.g. AWS Graviton) is not available (but it may work with the port of conda, if you compile Caiman yourself - we do not have binary packages and this is untested). If you care about this, please let us know.
 
 
@@ -85,7 +85,7 @@ VolPy is an analysis pipeline for voltage imaging data. The analysis is based on
 * `volparams`: An object for setting parameters of voltage imaging. It can be set and changed easily and is passed into the algorithms.
 * `VOLPY`: An object for running the spike detection algorithm and saving results.
 
-In order to use VolPy, you must install Keras into your conda environment. You can do this by activating your environment, and then issuing the command "mamba install -c conda-forge keras".
+The object detection network Mask R-CNN in VolPy is now compatible with tensorflow 2.4.1.
 
 To see examples of how these methods are used, please consult the `demo_pipeline_voltage_imaging.py` script in the `demos/general` folder. For more information about the approach check the [preprint](https://www.biorxiv.org/content/10.1101/2020.01.02.892323v1).
 

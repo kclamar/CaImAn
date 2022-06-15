@@ -29,6 +29,8 @@ from scipy.ndimage.morphology import binary_closing
 from scipy.ndimage.morphology import generate_binary_structure, iterate_structure
 import shutil
 from sklearn.decomposition import NMF
+from sklearn.preprocessing import StandardScaler
+from sklearn.pipeline import make_pipeline
 import tempfile
 import time
 import psutil
@@ -184,27 +186,24 @@ def update_spatial_components(Y, C=None, f=None, A_in=None, sn=None, dims=None,
     # we compute the indicator from distance indicator
     ind2_, nr, C, f, b_, A_in = computing_indicator(
         Y, A_in, b_in, C, f, nb, method_exp, dims, min_size, max_size, dist, expandCore, dview)
-    
-    # remove components that have a nan
-    ff = np.where(np.isnan(np.sum(C, axis=1)))
-    if np.size(ff) > 0:
-        logging.info("Eliminating nan components: {}".format(ff))
-        ff = ff[0]
-        A_in = csc_column_remove(A_in, list(ff))
-        C = np.delete(C, list(ff), 0)
-        
-    # remove empty components    
-    ff = np.where(np.sum(C, axis=1)==0)
-    if np.size(ff) > 0:
-        logging.info("Eliminating empty components: {}".format(ff))
-        ff = ff[0]
-        A_in = csc_column_remove(A_in, list(ff))
-        C = np.delete(C, list(ff), 0)
 
+    # remove components that are empty or have a nan
+    ff = np.where((np.sum(C, axis=1)==0) + np.isnan(np.sum(C, axis=1)))[0]
+    if np.size(ff) > 0:
+        logging.info("Eliminating empty and nan components: {}".format(ff))
+        A_in = csc_column_remove(A_in, list(ff))
+        C = np.delete(C, list(ff), 0)
+        # update indices
+        ind_list = list(range(nr-np.size(ff)))
+        for i in ff:
+            ind_list.insert(i, 0)
+        ind_list = np.array(ind_list, dtype=int)
+        ind2_ = [ind_list[np.setdiff1d(a,ff)] if len(a) else a for a in ind2_]
+
+    nr = np.shape(C)[0]
     if normalize_yyt_one and C is not None:
         C = np.array(C)
-        nr_C = np.shape(C)[0]
-        d_ = scipy.sparse.lil_matrix((nr_C, nr_C))
+        d_ = scipy.sparse.lil_matrix((nr, nr))
         d_.setdiag(np.sqrt(np.sum(C ** 2, 1)))
         A_in = A_in * d_
         C = C/(np.sqrt((C**2).sum(1))[:, np.newaxis] + np.finfo(np.float32).eps)
@@ -408,13 +407,12 @@ def regression_ipyparallel(pars):
             elif method_least_square == 'lasso_lars':  # lasso lars function from scikit learn
                 lambda_lasso = 0 if np.size(cct_) == 0 else \
                     .5 * noise_sn[px] * np.sqrt(np.max(cct_)) / T
-                clf = linear_model.LassoLars(alpha=lambda_lasso, positive=True,
-                                             fit_intercept=True)
-#                clf = linear_model.Lasso(alpha=lambda_lasso, positive=True,
-#                                         fit_intercept=True, normalize=True,
-#                                         selection='random')
-                a_lrs = clf.fit(np.array(c.T), np.ravel(y))
-                a = a_lrs.coef_
+                model = make_pipeline(
+                    StandardScaler(with_mean=False),
+                    linear_model.LassoLars(alpha=lambda_lasso, positive=True,
+                                                 fit_intercept=True, normalize=False)
+                    )
+                a = model.fit(np.array(c.T), np.ravel(y))['lassolars'].coef_
 
             else:
                 raise Exception(
@@ -457,7 +455,7 @@ def construct_ellipse_parallel(pars):
     return np.sqrt(np.sum([old_div((dist_cm * V[:, k]) ** 2, dkk[k]) for k in range(len(dkk))], 0)) <= dist
 
 def threshold_components(A, dims, medw=None, thr_method='max', maxthr=0.1, nrgthr=0.9999, extract_cc=True,
-                         se=None, ss=None, dview=None):
+                         se=None, ss=None, dview=None) -> np.ndarray:
     """
     Post-processing of spatial components which includes the following steps
 
@@ -1058,14 +1056,19 @@ def computing_indicator(Y, A_in, b, C, f, nb, method, dims, min_size, max_size, 
             dist_indicator_av = old_div(dist_indicator.astype(
                 'float32'), np.sum(dist_indicator.astype('float32'), axis=0))
             px = (np.sum(dist_indicator, axis=1) > 0)
-            not_px = 1 - px
-            if Y.shape[-1] < 30000:
-                f = Y[not_px, :].mean(0)
-            else:  # memory mapping fails here for some reasons
-                print('estimating f')
-                f = 0
-                for xxx in not_px:
-                    f = (f + Y[xxx]) / 2
+            not_px = ~px
+
+            if nb>1:
+                    f = NMF(nb, init='nndsvda').fit(np.maximum(Y[not_px, :], 0)).components_
+            else:
+                if Y.shape[-1] < 30000:
+                    f = Y[not_px, :].mean(0)
+                else:
+                    print('estimating f')
+                    f = 0
+                    for xxx in np.where(not_px)[0]:
+                        f += Y[xxx]
+                    f /= not_px.sum()
 
             f = np.atleast_2d(f)
 

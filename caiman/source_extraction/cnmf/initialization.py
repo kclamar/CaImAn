@@ -30,9 +30,11 @@ from scipy.ndimage.filters import correlate
 import scipy.sparse as spr
 from skimage.morphology import disk
 from sklearn.decomposition import NMF, FastICA
+from sklearn.exceptions import ConvergenceWarning
 from sklearn.utils.extmath import randomized_svd, squared_norm, randomized_range_finder
 import sys
 from typing import List
+import warnings
 
 import caiman
 from .deconvolution import constrained_foopsi
@@ -46,6 +48,8 @@ try:
     cv2.setNumThreads(0)
 except:
     pass
+
+warnings.filterwarnings(action='ignore', category=ConvergenceWarning)
 
 def resize(Y, size, interpolation=cv2.INTER_LINEAR):
     """faster and 3D compatible version of skimage.transform.resize"""
@@ -1030,7 +1034,7 @@ def imblur(Y, sig=5, siz=11, nDimBlur=None, kernel=None, opencv=True):
             if you want to specify a kernel
 
         opencv: [optional]
-            if you want to process to the blur using open cv method
+            if you want to process to the blur using OpenCV method
 
     Returns:
         the blurred image
@@ -1274,7 +1278,7 @@ def greedyROI_corr(Y, Y_ds, max_number=None, gSiz=None, gSig=None, center_psf=Tr
         for i in range(init_iter - 1):
             if max_number is not None:
                 max_number -= A.shape[-1]
-            if max_number is not 0:
+            if max_number != 0:
                 if i == init_iter-2 and seed_method.lower()[:4] == 'semi':
                     seed_method, min_corr, min_pnr = 'manual', 0, 0
                 logging.info('Searching for more neurons in the residual')
@@ -1734,7 +1738,7 @@ def init_neurons_corr_pnr(data, max_number=None, gSiz=15, gSig=None,
             [ai, ci_raw, ind_success] = extract_ac(data_filtered_box,
                                                    data_raw_box, ind_ctr, patch_dims)
 
-            if (np.sum(ai > 0) < min_pixel) or (not ind_success):
+            if (not ind_success) or (np.sum(ai > 0) < min_pixel):
                 # bad initialization. discard and continue
                 continue
             else:
@@ -1903,6 +1907,8 @@ def extract_ac(data_filtered, data_raw, ind_ctr, patch_dims):
     y_diff = np.concatenate([[-1], np.diff(ci)])
     b = np.median(ci[(y_diff >= 0) * (y_diff < sn)])
     ci -= b
+    if np.isnan(ci.sum()):
+        return None, None, False
 
     # return results
     return ai, ci, True
